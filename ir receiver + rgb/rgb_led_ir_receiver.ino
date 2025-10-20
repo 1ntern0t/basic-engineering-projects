@@ -15,6 +15,8 @@
 #define IR_5     0x08
 
 bool g_powerOn = false;
+uint8_t lastCmd = 0;
+unsigned long lastCmdMs = 0;
 
 inline uint8_t inv(uint8_t v){ return COMMON_ANODE ? (uint8_t)(255 - v) : v; }
 inline void writeRGB(uint8_t r,uint8_t g,uint8_t b){
@@ -27,14 +29,11 @@ inline void ledWhite(){ writeRGB(255,255,255); }
 
 void setColorByKey(uint8_t cmd){
   if(!g_powerOn) return;
-  switch(cmd){
-    case IR_1: writeRGB(255,0,0); break;
-    case IR_2: writeRGB(0,255,0); break;
-    case IR_3: writeRGB(255,0,255); break;
-    case IR_4: writeRGB(255,255,0); break;
-    case IR_5: writeRGB(0,0,255); break;
-    default: break;
-  }
+  if(cmd == IR_1) writeRGB(0,0,255);       // Blue
+  else if(cmd == IR_2) writeRGB(0,255,0);  // Green
+  else if(cmd == IR_3) writeRGB(255,0,255);// Purple
+  else if(cmd == IR_4) writeRGB(255,255,0);// Yellow
+  else if(cmd == IR_5) writeRGB(255,0,0);  // Red
 }
 
 void setup(){
@@ -42,21 +41,37 @@ void setup(){
   pinMode(PIN_G,OUTPUT);
   pinMode(PIN_B,OUTPUT);
   ledOff();
+
   Serial.begin(9600);
   delay(50);
+  Serial.println(F("IR RGB Controller (1–5 colors)"));
   IrReceiver.begin(IR_PIN, ENABLE_LED_FEEDBACK);
 }
 
 void loop(){
   if(IrReceiver.decode()){
+    if (IrReceiver.decodedIRData.flags & IRDATA_FLAGS_IS_REPEAT) {
+      IrReceiver.resume();
+      return;
+    }
+
     uint8_t cmd = IrReceiver.decodedIRData.command;
-    Serial.print(F("IR cmd=0x")); Serial.println(cmd,HEX);
-    if(cmd==IR_POWER){
+    Serial.print(F("IR cmd=0x")); Serial.println(cmd, HEX);
+
+    unsigned long now = millis();
+    if (cmd == lastCmd && (now - lastCmdMs) < 120) {
+      IrReceiver.resume();
+      return;
+    }
+    lastCmd = cmd; lastCmdMs = now;
+
+    if(cmd == IR_POWER){
       g_powerOn = !g_powerOn;
       if(g_powerOn) ledWhite(); else ledOff();
     }else{
       setColorByKey(cmd);
     }
+
     IrReceiver.resume();
   }
 }
